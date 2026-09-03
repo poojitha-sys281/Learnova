@@ -200,12 +200,12 @@ QUESTION:
 {question}
 """
 
-    response = client.interactions.create(
-        model="gemini-3.6-flash",
-        input=prompt
-    )
+    response = client.models.generate_content(
+    model="gemini-3.6-flash",
+    contents=prompt
+)
 
-    return response.output_text
+    return response.text
 
 def generate_summary():
 
@@ -232,12 +232,12 @@ STUDY MATERIAL:
 {context}
 """
 
-    response = client.interactions.create(
-        model="gemini-3.6-flash",
-        input=prompt
+    response = client.models.generate_content(
+    model="gemini-3.6-flash",
+    contents=prompt
     )
 
-    return response.output_text
+    return response.text
 
 
 # ============================================================
@@ -296,12 +296,12 @@ STUDY MATERIAL:
 
     try:
 
-        response = client.interactions.create(
+        response = client.models.generate_content(
         model="gemini-3.6-flash",
-        input=prompt
+        contents=prompt
     )
 
-        return response.output_text
+        quiz_text = response.text.strip()
 
     except Exception as e:
 
