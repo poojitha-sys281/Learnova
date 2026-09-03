@@ -208,38 +208,76 @@ QUESTION:
     return response.text
 
 def generate_summary():
-
     documents = collection.get()["documents"]
 
     if not documents:
         return "No study material found."
 
-    context = "\n\n".join(documents)
+    # Summarize the document in smaller batches
+    batch_size = 5
+    partial_summaries = []
 
-    prompt = f"""
+    for i in range(0, len(documents), batch_size):
+        batch = documents[i:i + batch_size]
+        context = "\n\n".join(batch)
+
+        prompt = f"""
 You are Learnova, an AI learning assistant.
 
-Create a clear and useful summary of the study material below.
+Summarize the following study material.
 
 Rules:
 - Use ONLY the provided study material.
 - Identify the most important concepts.
+- Keep important definitions and key points.
 - Use headings and bullet points.
-- Keep the explanation concise.
-- Make it easy for a student to revise.
+- Do not add information that is not present in the material.
 
 STUDY MATERIAL:
 {context}
 """
 
-    response = client.models.generate_content(
-    model="gemini-3.6-flash",
-    contents=prompt
-    )
+        try:
+            response = client.models.generate_content(
+                model="gemini-3.6-flash",
+                contents=prompt
+            )
 
-    return response.text
+            partial_summaries.append(response.text)
 
+        except Exception as e:
+            return f"⚠️ Summary generation failed: {type(e).__name__}"
 
+    # Combine the smaller summaries
+    combined = "\n\n".join(partial_summaries)
+
+    final_prompt = f"""
+You are Learnova, an AI learning assistant.
+
+Create one clear final study summary from the partial summaries below.
+
+Rules:
+- Use ONLY the information provided.
+- Remove unnecessary repetition.
+- Keep important concepts, definitions and key points.
+- Organize the answer with headings and bullet points.
+- Make it useful for exam revision.
+- Do not add outside information.
+
+PARTIAL SUMMARIES:
+{combined}
+"""
+
+    try:
+        response = client.models.generate_content(
+            model="gemini-3.6-flash",
+            contents=final_prompt
+        )
+
+        return response.text
+
+    except Exception as e:
+        return f"⚠️ Final summary generation failed: {type(e).__name__}"
 # ============================================================
 # GENERATE QUIZ
 # ============================================================
@@ -255,7 +293,7 @@ def generate_quiz():
         return []
 
     # Combine study material
-    context = "\n\n".join(documents)
+    context = "\n\n".join(documents[:10])
 
     prompt = f"""
 You are Learnova, an AI learning assistant.
