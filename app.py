@@ -201,7 +201,7 @@ QUESTION:
 """
 
     response = client.models.generate_content(
-    model="gemini-3.6-flash",
+    model="gemini-3.5-flash",
     contents=prompt
 )
 
@@ -239,7 +239,7 @@ STUDY MATERIAL:
 
         try:
             response = client.models.generate_content(
-                model="gemini-3.6-flash",
+                model="gemini-3.5-flash",
                 contents=prompt
             )
 
@@ -271,7 +271,7 @@ PARTIAL SUMMARIES:
 
     try:
         response = client.models.generate_content(
-            model="gemini-3.6-flash",
+            model="gemini-3.5-flash",
             contents=final_prompt
         )
 
@@ -336,7 +336,7 @@ STUDY MATERIAL:
     try:
 
         response = client.models.generate_content(
-        model="gemini-3.6-flash",
+        model="gemini-3.5-flash",
         contents=prompt
     )
 
