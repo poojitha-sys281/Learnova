@@ -172,19 +172,13 @@ def chunk_text(text, chunk_size=1000):
 # ============================================================
 
 def search_documents(query, top_k=3):
-
-    # Make sure there are documents
     count = collection.count()
 
     if count == 0:
         return []
 
-    # Create embedding for the question
-    query_embedding = embedding_model.encode(
-        query
-    ).tolist()
+    query_embedding = embedding_model.encode(query).tolist()
 
-    # Search ChromaDB
     results = collection.query(
         query_embeddings=[query_embedding],
         n_results=min(top_k, count)
@@ -196,8 +190,10 @@ def search_documents(query, top_k=3):
     if not results["documents"][0]:
         return []
 
-    return results["documents"][0]
+    documents = results["documents"][0]
+    metadatas = results.get("metadatas", [[]])[0]
 
+    return list(zip(documents, metadatas))
 
 # ============================================================
 # GENERATE RAG ANSWER
@@ -205,18 +201,13 @@ def search_documents(query, top_k=3):
 
 def generate_rag_answer(question, difficulty):
 
-    relevant_chunks = search_documents(question)
+    results = search_documents(question)
 
-    if not relevant_chunks:
+    if not results:
+        return "I couldn't find the answer in the uploaded material."
 
-        return (
-            "I couldn't find the answer in the "
-            "uploaded material."
-        )
-
-    # Combine relevant chunks
     context = "\n\n".join(
-        relevant_chunks
+        document for document, metadata in results
     )
 
     prompt = f"""
@@ -226,8 +217,6 @@ Answer the student's question using ONLY
 the information provided in the context below.
 
 Learning Level: {difficulty}
-
-Adapt your explanation according to the student's level:
 
 Beginner:
 - Use very simple language.
@@ -241,7 +230,6 @@ Intermediate:
 Advanced:
 - Give a detailed technical explanation.
 - Include deeper concepts and technical terminology when relevant.
-
 
 If the answer cannot be found in the context,
 say:
@@ -496,24 +484,23 @@ if uploaded_file:
                 # Create embeddings
                 embeddings = embedding_model.encode(chunks)
 
-                # Create unique file ID
-                file_id = uploaded_file.name.replace(
-                    " ",
-                    "_"
-                )
+                file_id = uploaded_file.name.replace(" ", "_")
+                ids = [f"{file_id}_chunk_{i}" for i in range(len(chunks))]
 
-                ids = [
-                    f"{file_id}_chunk_{i}"
+                metadatas = [
+                    {
+                        "source": uploaded_file.name,
+                        "chunk": i
+                    }
                     for i in range(len(chunks))
                 ]
 
-                # Store in ChromaDB
                 collection.upsert(
                     ids=ids,
                     documents=chunks,
-                    embeddings=embeddings.tolist()
+                    embeddings=embeddings.tolist(),
+                    metadatas=metadatas
                 )
-
                 # Save PDF information
                 st.session_state.processed_file = uploaded_file.name
                 st.session_state.pdf_text = text
