@@ -443,101 +443,104 @@ uploaded_file = st.file_uploader(
 # PROCESS PDF
 # ============================================================
 
+# ============================================================
+# PROCESS PDF
+# ============================================================
+
 if uploaded_file:
 
+    # Check if this PDF is already processed
     if st.session_state.processed_file != uploaded_file.name:
 
-        st.session_state.processed_file = uploaded_file.name
+        with st.spinner("Processing your PDF..."):
 
-    # Open PDF
-    pdf_bytes = uploaded_file.read()
+            # Open PDF
+            pdf_bytes = uploaded_file.read()
 
-    doc = fitz.open(
-        stream=pdf_bytes,
-        filetype="pdf"
-    )
+            doc = fitz.open(
+                stream=pdf_bytes,
+                filetype="pdf"
+            )
 
-    # Extract text
-    text = ""
+            # Extract text
+            text = ""
 
-    for page in doc:
-        text += page.get_text()
+            for page in doc:
+                text += page.get_text()
 
-    doc.close()
+            doc.close()
 
-    # Check extracted text
-    if not text.strip():
+            # Check extracted text
+            if not text.strip():
 
-        st.error(
-            "❌ No text could be extracted "
-            "from this PDF."
-        )
+                st.error(
+                    "❌ No text could be extracted from this PDF."
+                )
 
-    else:
+            else:
 
-        st.success(
-            "PDF uploaded successfully! ✅"
-        )
+                # Create chunks
+                chunks = chunk_text(text)
 
-        # ----------------------------------------------------
-        # DISPLAY EXTRACTED TEXT
-        # ----------------------------------------------------
+                # Create embeddings
+                embeddings = embedding_model.encode(chunks)
 
-        st.write(
-            "📄 Extracted text:"
-        )
+                # Create unique file ID
+                file_id = uploaded_file.name.replace(
+                    " ",
+                    "_"
+                )
+
+                ids = [
+                    f"{file_id}_chunk_{i}"
+                    for i in range(len(chunks))
+                ]
+
+                # Store in ChromaDB
+                collection.upsert(
+                    ids=ids,
+                    documents=chunks,
+                    embeddings=embeddings.tolist()
+                )
+
+                # Save PDF information in session state
+                st.session_state.processed_file = uploaded_file.name
+                st.session_state.pdf_text = text
+                st.session_state.chunk_count = len(chunks)
+                st.session_state.embedding_count = len(embeddings)
+
+                # Clear old summary and quiz
+                st.session_state.pop("summary", None)
+                st.session_state.quiz = []
+                st.session_state.quiz_submitted = False
+                st.session_state.score = 0
+                st.session_state.answers = []
+
+    # ========================================================
+    # DISPLAY PDF INFORMATION
+    # ========================================================
+
+    if "pdf_text" in st.session_state:
+
+        st.success("PDF uploaded successfully! ✅")
+
+        st.write("📄 Extracted text:")
 
         st.text_area(
             "PDF Content",
-            text,
+            st.session_state.pdf_text,
             height=300
         )
 
-        # ----------------------------------------------------
-        # CREATE CHUNKS
-        # ----------------------------------------------------
-
-        chunks = chunk_text(text)
-
         st.write(
-            f"📚 Created {len(chunks)} chunks"
-        )
-
-        # ----------------------------------------------------
-        # CREATE EMBEDDINGS
-        # ----------------------------------------------------
-
-        embeddings = embedding_model.encode(
-            chunks
+            f"📚 Created {st.session_state.chunk_count} chunks"
         )
 
         st.write(
-            f"🧠 Created {len(embeddings)} embeddings"
+            f"🧠 Created {st.session_state.embedding_count} embeddings"
         )
 
-        # ----------------------------------------------------
-        # STORE IN CHROMADB
-        # ----------------------------------------------------
-
-        file_id = uploaded_file.name.replace(
-            " ",
-            "_"
-        )
-
-        ids = [
-            f"{file_id}_chunk_{i}"
-            for i in range(len(chunks))
-        ]
-
-        collection.upsert(
-            ids=ids,
-            documents=chunks,
-            embeddings=embeddings.tolist()
-        )
-
-        st.success(
-            "📦 Chunks stored in ChromaDB! ✅"
-        )
+        st.success("📦 Chunks stored in ChromaDB! ✅")
 # ============================================================
 # AI SUMMARY
 # ============================================================
