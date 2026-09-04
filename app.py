@@ -26,6 +26,28 @@ st.set_page_config(
 )
 
 # ============================================================
+# INITIALIZE SESSION STATE
+# ============================================================
+
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+
+if "quiz" not in st.session_state:
+    st.session_state.quiz = []
+
+if "quiz_submitted" not in st.session_state:
+    st.session_state.quiz_submitted = False
+
+if "score" not in st.session_state:
+    st.session_state.score = 0
+
+if "answers" not in st.session_state:
+    st.session_state.answers = []
+
+if "processed_file" not in st.session_state:
+    st.session_state.processed_file = None
+
+# ============================================================
 # SIDEBAR
 # ============================================================
 
@@ -375,24 +397,6 @@ STUDY MATERIAL:
         return []
 
 
-# ============================================================
-# INITIALIZE SESSION STATE
-# ============================================================
-
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-
-if "quiz" not in st.session_state:
-    st.session_state.quiz = []
-
-if "quiz_submitted" not in st.session_state:
-    st.session_state.quiz_submitted = False
-
-if "score" not in st.session_state:
-    st.session_state.score = 0
-
-if "answers" not in st.session_state:
-    st.session_state.answers = []
 
 
 # ============================================================
