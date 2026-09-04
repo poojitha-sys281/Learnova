@@ -450,16 +450,27 @@ uploaded_file = st.file_uploader(
 if uploaded_file:
 
     # Check if this PDF is already processed
+    # Check if this PDF is already processed
     if st.session_state.processed_file != uploaded_file.name:
 
         with st.spinner("Processing your PDF..."):
+
+            # Remove previous document data
+            collection.delete(where={})
+
+            # Clear previous results
+            st.session_state.pop("summary", None)
+            st.session_state.quiz = []
+            st.session_state.quiz_submitted = False
+            st.session_state.score = 0
+            st.session_state.answers = []
 
             # Open PDF
             pdf_bytes = uploaded_file.read()
 
             doc = fitz.open(
-                stream=pdf_bytes,
-                filetype="pdf"
+            stream=pdf_bytes,
+            filetype="pdf"
             )
 
             # Extract text
@@ -474,7 +485,7 @@ if uploaded_file:
             if not text.strip():
 
                 st.error(
-                    "❌ No text could be extracted from this PDF."
+                "❌ No text could be extracted from this PDF."
                 )
 
             else:
@@ -503,19 +514,11 @@ if uploaded_file:
                     embeddings=embeddings.tolist()
                 )
 
-                # Save PDF information in session state
+                # Save PDF information
                 st.session_state.processed_file = uploaded_file.name
                 st.session_state.pdf_text = text
                 st.session_state.chunk_count = len(chunks)
                 st.session_state.embedding_count = len(embeddings)
-
-                # Clear old summary and quiz
-                st.session_state.pop("summary", None)
-                st.session_state.quiz = []
-                st.session_state.quiz_submitted = False
-                st.session_state.score = 0
-                st.session_state.answers = []
-
     # ========================================================
     # DISPLAY PDF INFORMATION
     # ========================================================
