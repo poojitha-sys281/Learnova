@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 import fitz
 import chromadb
 import json
+import time
 
 
 # ============================================================
@@ -90,6 +91,40 @@ if not api_key:
     st.stop()
 
 client = genai.Client(api_key=api_key)
+
+
+
+
+def generate_with_fallback(prompt):
+    models = [
+        "gemini-3.5-flash",
+        "gemini-3.5-flash-lite"
+    ]
+
+    last_error = None
+
+    for model in models:
+        for attempt in range(2):
+            try:
+                response = client.models.generate_content(
+                    model=model,
+                    contents=prompt
+                )
+                return response.text
+
+            except Exception as e:
+                last_error = e
+
+                if "503" in str(e) or "UNAVAILABLE" in str(e):
+                    time.sleep(2 * (attempt + 1))
+                    continue
+
+                break
+
+    return (
+        "⚠️ Gemini is temporarily unavailable. "
+        "Please try again in a moment."
+    )
 
 
 # ============================================================
@@ -222,12 +257,7 @@ QUESTION:
 {question}
 """
 
-    response = client.models.generate_content(
-    model="gemini-3.5-flash",
-    contents=prompt
-)
-
-    return response.text
+    return generate_with_fallback(prompt)
 
 def generate_summary():
     documents = collection.get()["documents"]
@@ -260,12 +290,7 @@ STUDY MATERIAL:
 """
 
         try:
-            response = client.models.generate_content(
-                model="gemini-3.5-flash",
-                contents=prompt
-            )
-
-            partial_summaries.append(response.text)
+            return generate_with_fallback(prompt)
 
         except Exception as e:
             status = getattr(e, "status_code", "unknown")
@@ -292,12 +317,7 @@ PARTIAL SUMMARIES:
 """
 
     try:
-        response = client.models.generate_content(
-            model="gemini-3.5-flash",
-            contents=final_prompt
-        )
-
-        return response.text
+        return generate_with_fallback(prompt)
 
     except Exception as e:
         return f"⚠️ Final summary generation failed: {type(e).__name__}"
@@ -357,12 +377,7 @@ STUDY MATERIAL:
 
     try:
 
-        response = client.models.generate_content(
-        model="gemini-3.5-flash",
-        contents=prompt
-    )
-
-        quiz_text = response.text.strip()
+        return generate_with_fallback(prompt)
 
     except Exception as e:
 
