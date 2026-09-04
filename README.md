@@ -52,24 +52,6 @@ It combines **Generative AI, Retrieval-Augmented Generation (RAG), embeddings, a
 
 ---
 
-## 🖥️ Application Screenshots
-
-### 📄 PDF Upload & Document Processing
-
-![PDF Upload](assets/pdf-upload.png)
-
-### 💬 AI Study Chat
-
-![AI Study Chat](assets/ai-chat.png)
-
-### ❓ AI Quiz
-
-![AI Quiz](assets/ai-quiz.png)
-
-> Add these screenshots to the `assets/` folder after capturing them from the working application.
-
----
-
 ## 🏗️ Architecture
 
 ![Learnova Architecture](assets/learnova-architecture.png)
