@@ -18,6 +18,8 @@ from sentence_transformers import SentenceTransformer
 
 load_dotenv()
 
+api_key = os.getenv("GEMINI_API_KEY")
+
 
 # ============================================================
 # PAGE CONFIGURATION
@@ -29,30 +31,28 @@ st.set_page_config(
     layout="centered"
 )
 
+
 # ============================================================
-# CUSTOM UI STYLING
+# CUSTOM CSS
 # ============================================================
 
-st.markdown("""
-<style>
+st.markdown(
+    """
+    <style>
 
-    /* Main application */
     .main {
         padding-top: 1rem;
     }
 
-    /* Main title */
     h1 {
         font-size: 2.5rem !important;
         font-weight: 700 !important;
     }
 
-    /* Section headings */
     h2, h3 {
         font-weight: 600 !important;
     }
 
-    /* Buttons */
     .stButton > button {
         width: 100%;
         border-radius: 10px;
@@ -60,36 +60,33 @@ st.markdown("""
         padding: 0.6rem 1rem;
     }
 
-    /* File uploader */
     [data-testid="stFileUploader"] {
         border-radius: 12px;
     }
 
-    /* Chat messages */
     [data-testid="stChatMessage"] {
         border-radius: 12px;
         padding: 0.5rem;
     }
 
-    /* Metrics */
     [data-testid="stMetric"] {
         border-radius: 10px;
         padding: 10px;
     }
 
-    /* Sidebar */
     [data-testid="stSidebar"] {
         padding-top: 1rem;
     }
 
-    /* Dividers */
     hr {
         margin-top: 1rem;
         margin-bottom: 1rem;
     }
 
-</style>
-""", unsafe_allow_html=True)
+    </style>
+    """,
+    unsafe_allow_html=True
+)
 
 
 # ============================================================
@@ -109,7 +106,7 @@ if "score" not in st.session_state:
     st.session_state.score = 0
 
 if "answers" not in st.session_state:
-    st.session_state.answers = []
+    st.session_state.answers = {}
 
 if "processed_file_hash" not in st.session_state:
     st.session_state.processed_file_hash = None
@@ -127,7 +124,7 @@ if "embedding_count" not in st.session_state:
     st.session_state.embedding_count = 0
 
 if "summary" not in st.session_state:
-    st.session_state.summary = None
+    st.session_state.summary = ""
 
 if "quiz_version" not in st.session_state:
     st.session_state.quiz_version = 0
@@ -141,28 +138,28 @@ with st.sidebar:
 
     st.title("🎓 Learnova")
 
-    st.caption("Your AI-powered learning assistant")
+    st.markdown("### AI-Powered Learning Assistant")
 
     st.divider()
 
-    st.subheader("✨ Features")
+    st.markdown("### ✨ Features")
 
-    st.write("📄 PDF-based Q&A")
-    st.write("🔎 Semantic search")
-    st.write("🧠 RAG-powered answers")
-    st.write("📝 AI summaries")
-    st.write("🎯 Automatic MCQs")
-    st.write("📊 Quiz scoring")
-    st.write("🎓 Personalized explanations")
-
-    st.divider()
-
-    st.caption(
-        "Built with Python, Streamlit, Gemini API, "
-        "RAG, Embeddings & ChromaDB"
+    st.markdown(
+        """
+        - 📄 PDF Upload
+        - 🧠 RAG-based Q&A
+        - 🔎 Semantic Search
+        - 📝 AI Summarization
+        - ❓ Automatic MCQs
+        - 🎯 Difficulty Levels
+        - 📊 Quiz Scoring
+        - 💬 AI Study Chat
+        """
     )
 
-    if st.button("🗑️ Clear Chat", use_container_width=True):
+    st.divider()
+
+    if st.button("🗑️ Clear Chat"):
 
         st.session_state.messages = []
 
@@ -170,20 +167,22 @@ with st.sidebar:
 
 
 # ============================================================
-# GEMINI API SETUP
+# API KEY CHECK
 # ============================================================
-
-api_key = os.getenv("GEMINI_API_KEY")
 
 if not api_key:
 
     st.error(
-        "⚠️ GEMINI_API_KEY is not configured. "
+        "GEMINI_API_KEY is not configured. "
         "Please add it to your .env file or Streamlit Cloud Secrets."
     )
 
     st.stop()
 
+
+# ============================================================
+# GEMINI CLIENT
+# ============================================================
 
 client = genai.Client(api_key=api_key)
 
@@ -193,30 +192,39 @@ client = genai.Client(api_key=api_key)
 # ============================================================
 
 def generate_with_fallback(prompt):
+    """
+    Generate text using Gemini Interactions API.
+
+    Uses retries for temporary service errors and
+    falls back to another model if necessary.
+    """
 
     models = [
-        "gemini-3.5-flash",
-        "gemini-3.5-flash-lite"
+        "gemini-3.6-flash",
+        "gemini-3.5-flash-lite",
+        "gemini-3.5-flash"
     ]
 
     last_error = None
 
     for model in models:
 
-        for attempt in range(2):
+        for attempt in range(3):
 
             try:
 
-                response = client.models.generate_content(
+                response = client.interactions.create(
                     model=model,
-                    contents=prompt
+                    input=prompt
                 )
 
-                if response and response.text:
+                if response and response.output_text:
 
-                    return response.text.strip()
+                    return response.output_text.strip()
 
-                last_error = Exception("Empty Gemini response.")
+                last_error = Exception(
+                    "Gemini returned an empty response."
+                )
 
             except Exception as e:
 
@@ -224,26 +232,39 @@ def generate_with_fallback(prompt):
 
                 error_text = str(e).upper()
 
-                if (
-                    "503" in error_text
-                    or "UNAVAILABLE" in error_text
-                    or "SERVICE UNAVAILABLE" in error_text
-                ):
+                temporary_error = any(
+                    code in error_text
+                    for code in [
+                        "503",
+                        "500",
+                        "429",
+                        "UNAVAILABLE",
+                        "SERVICE UNAVAILABLE",
+                        "RESOURCE EXHAUSTED",
+                        "INTERNAL"
+                    ]
+                )
 
-                    time.sleep(2 * (attempt + 1))
+                if temporary_error:
 
-                    continue
+                    if attempt < 2:
+
+                        wait_time = 2 ** attempt
+
+                        time.sleep(wait_time)
+
+                        continue
 
                 break
 
-    return (
-        "⚠️ Gemini is temporarily unavailable. "
-        "Please try again in a moment."
-    )
+    if last_error:
+        print("Gemini Error:", last_error)
+
+    return None
 
 
 # ============================================================
-# LOAD EMBEDDING MODEL
+# EMBEDDING MODEL
 # ============================================================
 
 @st.cache_resource
@@ -258,7 +279,7 @@ embedding_model = load_embedding_model()
 
 
 # ============================================================
-# CHROMADB SETUP
+# CHROMADB
 # ============================================================
 
 @st.cache_resource
@@ -287,6 +308,12 @@ def chunk_text(
     chunk_size=1000,
     overlap=150
 ):
+    """
+    Split document text into overlapping chunks.
+    """
+
+    if not text:
+        return []
 
     chunks = []
 
@@ -302,9 +329,14 @@ def chunk_text(
 
         if chunk.strip():
 
-            chunks.append(chunk.strip())
+            chunks.append(
+                chunk.strip()
+            )
 
-        start += chunk_size - overlap
+        if end >= text_length:
+            break
+
+        start = end - overlap
 
     return chunks
 
@@ -313,7 +345,7 @@ def chunk_text(
 # FILE HASH
 # ============================================================
 
-def calculate_file_hash(file_bytes):
+def get_file_hash(file_bytes):
 
     return hashlib.sha256(
         file_bytes
@@ -321,18 +353,16 @@ def calculate_file_hash(file_bytes):
 
 
 # ============================================================
-# CLEAR CHROMADB
+# CLEAR CHROMADB COLLECTION
 # ============================================================
 
 def clear_collection():
 
-    count = collection.count()
+    try:
 
-    if count > 0:
+        existing = collection.get()
 
-        existing_data = collection.get()
-
-        existing_ids = existing_data.get(
+        existing_ids = existing.get(
             "ids",
             []
         )
@@ -343,40 +373,63 @@ def clear_collection():
                 ids=existing_ids
             )
 
+    except Exception as e:
+
+        print(
+            "Error clearing ChromaDB:",
+            e
+        )
+
 
 # ============================================================
-# GET ALL DOCUMENTS IN CORRECT CHUNK ORDER
+# GET ALL STORED DOCUMENTS
 # ============================================================
 
 def get_all_documents():
 
-    data = collection.get()
+    try:
 
-    documents = data.get(
-        "documents",
-        []
-    )
-
-    metadatas = data.get(
-        "metadatas",
-        []
-    )
-
-    combined = list(
-        zip(
-            documents,
-            metadatas
+        results = collection.get(
+            include=[
+                "documents",
+                "metadatas"
+            ]
         )
-    )
 
-    combined.sort(
-        key=lambda item: item[1].get(
-            "chunk",
-            0
+        documents = results.get(
+            "documents",
+            []
         )
-    )
 
-    return combined
+        metadatas = results.get(
+            "metadatas",
+            []
+        )
+
+        combined = list(
+            zip(
+                documents,
+                metadatas
+            )
+        )
+
+        combined.sort(
+            key=lambda x: x[1].get(
+                "chunk",
+                0
+            )
+        )
+
+        return combined
+
+    except Exception as e:
+
+        print(
+            "Error retrieving documents:",
+            e
+        )
+
+        return []
 
 
 # ============================================================
@@ -388,53 +441,81 @@ def search_documents(
     top_k=3
 ):
 
-    count = collection.count()
+    try:
 
-    if count == 0:
+        count = collection.count()
+
+        if count == 0:
+
+            return []
+
+        query_embedding = (
+            embedding_model
+            .encode(query)
+            .tolist()
+        )
+
+        results = collection.query(
+            query_embeddings=[
+                query_embedding
+            ],
+            n_results=min(
+                top_k,
+                count
+            )
+        )
+
+        documents = results.get(
+            "documents",
+            []
+        )
+
+        metadatas = results.get(
+            "metadatas",
+            []
+        )
+
+        if not documents:
+            return []
+
+        if not documents[0]:
+            return []
+
+        retrieved_documents = []
+
+        for i, document in enumerate(
+            documents[0]
+        ):
+
+            metadata = {}
+
+            if (
+                metadatas
+                and len(metadatas) > 0
+                and i < len(metadatas[0])
+            ):
+
+                metadata = (
+                    metadatas[0][i]
+                )
+
+            retrieved_documents.append(
+                (
+                    document,
+                    metadata
+                )
+            )
+
+        return retrieved_documents
+
+    except Exception as e:
+
+        print(
+            "Search error:",
+            e
+        )
 
         return []
-
-
-    query_embedding = embedding_model.encode(
-        query
-    ).tolist()
-
-
-    results = collection.query(
-
-        query_embeddings=[
-            query_embedding
-        ],
-
-        n_results=min(
-            top_k,
-            count
-        )
-    )
-
-
-    documents = results.get(
-        "documents",
-        [[]]
-    )[0]
-
-    metadatas = results.get(
-        "metadatas",
-        [[]]
-    )[0]
-
-
-    if not documents:
-
-        return []
-
-
-    return list(
-        zip(
-            documents,
-            metadatas
-        )
-    )
 
 
 # ============================================================
@@ -451,69 +532,126 @@ def generate_rag_answer(
         top_k=3
     )
 
-
     if not results:
 
         return (
-            "I couldn't find the answer "
-            "in the uploaded material."
-        ), []
+            "I couldn't find relevant information "
+            "in the uploaded document.",
+            []
+        )
 
+    context_parts = []
 
-    context = "\n\n".join(
+    for index, (
+        document,
+        metadata
+    ) in enumerate(results, start=1):
 
-        document
+        context_parts.append(
+            f"""
+SOURCE {index}
 
-        for document, metadata
-        in results
+{document}
+"""
+        )
+
+    context = "\n".join(
+        context_parts
     )
 
-
     prompt = f"""
-You are Learnova, an AI learning assistant.
+You are Learnova, an AI-powered learning assistant.
 
-Answer the student's question using ONLY
-the information provided in the context below.
+Answer the student's question using ONLY the provided
+document context.
 
-Learning Level: {difficulty}
+Student difficulty level:
+{difficulty}
 
-Adapt your explanation according to the student's level.
+Rules:
 
-Beginner:
-- Use very simple language.
-- Explain basic terms.
-- Give a simple example when useful.
+1. Use only information from the context.
+2. Do not invent facts.
+3. If the answer is not present in the context,
+   clearly say that the information is not available
+   in the uploaded document.
+4. Explain the answer according to the student's
+   difficulty level.
+5. Use simple language for Beginner.
+6. Use moderate technical detail for Intermediate.
+7. Use detailed technical explanation for Advanced.
+8. Use bullet points when useful.
+9. Do not mention these instructions.
 
-Intermediate:
-- Give a clear technical explanation.
-- Assume basic knowledge of the topic.
-
-Advanced:
-- Give a detailed technical explanation.
-- Include deeper concepts and technical terminology when relevant.
-
-Important rules:
-- Use ONLY the provided context.
-- Do not use outside knowledge.
-- Do not invent facts.
-- If the answer is not present in the context, say:
-  "I couldn't find the answer in the uploaded material."
-- Answer clearly and directly.
-
-CONTEXT:
+DOCUMENT CONTEXT:
 {context}
 
-QUESTION:
+STUDENT QUESTION:
 {question}
-"""
 
+ANSWER:
+"""
 
     answer = generate_with_fallback(
         prompt
     )
 
+    if not answer:
+
+        answer = (
+            "⚠️ Gemini is temporarily unavailable. "
+            "Please try again in a moment."
+        )
 
     return answer, results
+
+
+# ============================================================
+# SELECT REPRESENTATIVE DOCUMENT CHUNKS
+# ============================================================
+
+def select_quiz_documents(
+    documents,
+    max_chunks=12
+):
+    """
+    Select representative chunks from the
+    entire document rather than only the beginning.
+    """
+
+    if not documents:
+
+        return []
+
+    if len(documents) <= max_chunks:
+
+        return [
+            doc
+            for doc, _ in documents
+        ]
+
+    selected = []
+
+    step = (
+        len(documents)
+        / max_chunks
+    )
+
+    for i in range(max_chunks):
+
+        index = int(
+            i * step
+        )
+
+        if index >= len(documents):
+
+            index = len(documents) - 1
+
+        selected.append(
+            documents[index][0]
+        )
+
+    return selected
 
 
 # ============================================================
@@ -522,156 +660,60 @@ QUESTION:
 
 def generate_summary():
 
-    combined_documents = get_all_documents()
+    documents = get_all_documents()
 
+    if not documents:
 
-    if not combined_documents:
+        return None
 
-        return "No study material found."
+    # Use representative chunks so that a large PDF
+    # does not require many Gemini calls.
+    selected_chunks = select_quiz_documents(
+        documents,
+        max_chunks=12
+    )
 
-
-    documents = [
-
-        document
-
-        for document, metadata
-        in combined_documents
-    ]
-
-
-    # --------------------------------------------------------
-    # Create partial summaries
-    # --------------------------------------------------------
-
-    batch_size = 5
-
-    partial_summaries = []
-
-
-    for i in range(
-        0,
-        len(documents),
-        batch_size
-    ):
-
-        batch = documents[
-            i:i + batch_size
+    context = "\n\n".join(
+        [
+            f"SECTION {i + 1}:\n{chunk}"
+            for i, chunk in enumerate(
+                selected_chunks
+            )
         ]
+    )
 
+    prompt = f"""
+You are Learnova, an AI-powered learning assistant.
 
-        context = "\n\n".join(
-            batch
-        )
+Create a clear and useful study summary of the
+uploaded document.
 
+Use ONLY the information provided in the document
+context.
 
-        prompt = f"""
-You are Learnova, an AI learning assistant.
+Requirements:
 
-Summarize the following study material.
+- Identify the main topics.
+- Explain important concepts.
+- Include important definitions.
+- Include important points, formulas, processes,
+  or examples when they appear in the context.
+- Organize the answer using headings and bullet points.
+- Make it useful for exam preparation.
+- Do not invent information.
+- Do not mention that only selected sections were used.
+- Keep the summary concise but informative.
 
-Rules:
-- Use ONLY the provided study material.
-- Identify the most important concepts.
-- Keep important definitions.
-- Keep important key points.
-- Use headings and bullet points.
-- Do not add outside information.
-- Do not invent facts.
-
-STUDY MATERIAL:
+DOCUMENT CONTEXT:
 
 {context}
+
+STUDY SUMMARY:
 """
 
-
-        summary = generate_with_fallback(
-            prompt
-        )
-
-
-        if summary.startswith(
-            "⚠️ Gemini is temporarily unavailable"
-        ):
-
-            return summary
-
-
-        partial_summaries.append(
-            summary
-        )
-
-
-    # --------------------------------------------------------
-    # Combine partial summaries
-    # --------------------------------------------------------
-
-    combined = "\n\n".join(
-        partial_summaries
+    return generate_with_fallback(
+        prompt
     )
-
-
-    final_prompt = f"""
-You are Learnova, an AI learning assistant.
-
-Create ONE clear final study summary
-from the partial summaries below.
-
-Rules:
-- Use ONLY the information provided.
-- Remove unnecessary repetition.
-- Keep important concepts.
-- Keep important definitions.
-- Keep important key points.
-- Organize using headings and bullet points.
-- Make it useful for exam revision.
-- Do not add outside information.
-- Do not invent facts.
-
-PARTIAL SUMMARIES:
-
-{combined}
-"""
-
-
-    final_summary = generate_with_fallback(
-        final_prompt
-    )
-
-
-    return final_summary
-
-
-# ============================================================
-# SELECT REPRESENTATIVE CHUNKS FOR QUIZ
-# ============================================================
-
-def select_quiz_documents(
-    documents,
-    max_chunks=10
-):
-
-    if len(documents) <= max_chunks:
-
-        return documents
-
-
-    selected = []
-
-    step = len(documents) / max_chunks
-
-
-    for i in range(max_chunks):
-
-        index = int(
-            i * step
-        )
-
-        selected.append(
-            documents[index]
-        )
-
-
-    return selected
 
 
 # ============================================================
@@ -680,28 +722,29 @@ def select_quiz_documents(
 
 def extract_json(text):
 
+    if not text:
+
+        return None
+
     text = text.strip()
 
+    # Remove Markdown code fences
+    text = re.sub(
+        r"```json",
+        "",
+        text,
+        flags=re.IGNORECASE
+    )
 
-    # Remove markdown code blocks
+    text = re.sub(
+        r"```",
+        "",
+        text
+    )
 
-    if text.startswith("```"):
+    text = text.strip()
 
-        text = re.sub(
-            r"```(?:json)?",
-            "",
-            text,
-            flags=re.IGNORECASE
-        )
-
-        text = text.replace(
-            "```",
-            ""
-        ).strip()
-
-
-    # Try direct JSON
-
+    # Direct JSON parsing
     try:
 
         return json.loads(text)
@@ -710,13 +753,10 @@ def extract_json(text):
 
         pass
 
-
-    # Try to find JSON array
-
+    # Find JSON array inside response
     start = text.find("[")
 
     end = text.rfind("]")
-
 
     if start != -1 and end != -1:
 
@@ -734,7 +774,6 @@ def extract_json(text):
 
             return None
 
-
     return None
 
 
@@ -751,39 +790,33 @@ def validate_quiz(quiz):
 
         return False
 
-
     if len(quiz) < 5:
 
         return False
 
-
-    for question in quiz[:5]:
+    for item in quiz:
 
         if not isinstance(
-            question,
+            item,
             dict
         ):
 
             return False
 
-
-        required_fields = [
+        required_keys = [
             "question",
             "options",
             "answer",
             "explanation"
         ]
 
+        for key in required_keys:
 
-        for field in required_fields:
-
-            if field not in question:
+            if key not in item:
 
                 return False
 
-
-        options = question["options"]
-
+        options = item["options"]
 
         if not isinstance(
             options,
@@ -792,16 +825,13 @@ def validate_quiz(quiz):
 
             return False
 
-
         if len(options) != 4:
 
             return False
 
-
-        if question["answer"] not in options:
+        if item["answer"] not in options:
 
             return False
-
 
     return True
 
@@ -810,119 +840,295 @@ def validate_quiz(quiz):
 # GENERATE QUIZ
 # ============================================================
 
-def generate_quiz():
+def generate_quiz(
+    difficulty
+):
 
-    combined_documents = get_all_documents()
+    documents = get_all_documents()
 
+    if not documents:
 
-    if not combined_documents:
+        return None
 
-        return []
-
-
-    documents = [
-
-        document
-
-        for document, metadata
-        in combined_documents
-    ]
-
-
-    # Use representative chunks from
-    # the entire document
-
-    selected_documents = select_quiz_documents(
+    selected_chunks = select_quiz_documents(
         documents,
-        max_chunks=10
+        max_chunks=12
     )
-
 
     context = "\n\n".join(
-        selected_documents
+        [
+            f"SECTION {i + 1}:\n{chunk}"
+            for i, chunk in enumerate(
+                selected_chunks
+            )
+        ]
     )
 
-
     prompt = f"""
-You are Learnova, an AI learning assistant.
+You are Learnova, an AI-powered learning assistant.
 
-Create exactly 5 multiple-choice questions
-based ONLY on the study material below.
+Generate exactly 5 multiple-choice questions
+from the provided document context.
 
-Rules:
+Student difficulty level:
+{difficulty}
 
-- Create exactly 5 questions.
-- Each question must have exactly 4 options.
-- There must be exactly one correct answer.
-- The correct answer must exactly match one option.
-- Do not use information outside the study material.
-- Each question must include an explanation.
-- Avoid duplicate questions.
-- Cover different concepts from the provided material.
-- Return ONLY valid JSON.
-- Do not use markdown.
-- Do not add any text before or after the JSON.
+Difficulty rules:
 
-Use exactly this format:
+Beginner:
+- Basic concepts
+- Definitions
+- Simple understanding
+
+Intermediate:
+- Conceptual understanding
+- Application
+- Comparisons
+
+Advanced:
+- Deeper concepts
+- Reasoning
+- Application
+- Technical understanding
+
+IMPORTANT:
+
+Return ONLY valid JSON.
+
+Do NOT use Markdown.
+Do NOT use ```json.
+Do NOT add explanations outside the JSON.
+
+The JSON must have exactly this structure:
 
 [
   {{
     "question": "Question text",
     "options": [
-      "Option 1",
-      "Option 2",
-      "Option 3",
-      "Option 4"
+      "Option A",
+      "Option B",
+      "Option C",
+      "Option D"
     ],
     "answer": "Correct option",
-    "explanation": "Explanation of the correct answer"
+    "explanation": "Short explanation"
   }}
 ]
 
-STUDY MATERIAL:
+Rules:
+
+1. Generate exactly 5 questions.
+2. Each question must have exactly 4 options.
+3. The answer must exactly match one of the options.
+4. Each question must be based on the provided context.
+5. Do not invent information.
+6. Avoid duplicate questions.
+7. Make the correct answer position vary between questions.
+
+DOCUMENT CONTEXT:
 
 {context}
 """
 
-
-    quiz_text = generate_with_fallback(
+    response = generate_with_fallback(
         prompt
     )
 
+    if not response:
 
-    if quiz_text.startswith(
-        "⚠️ Gemini is temporarily unavailable"
-    ):
-
-        st.error(
-            quiz_text
-        )
-
-        return []
-
+        return None
 
     quiz = extract_json(
-        quiz_text
+        response
     )
-
 
     if not validate_quiz(
         quiz
     ):
 
-        st.error(
-            "❌ Gemini returned invalid quiz data. "
-            "Please try generating the quiz again."
-        )
-
-        return []
-
+        return None
 
     return quiz[:5]
 
 
 # ============================================================
-# MAIN HEADER
+# PDF PROCESSING
+# ============================================================
+
+def process_pdf(uploaded_file):
+
+    file_bytes = uploaded_file.getvalue()
+
+    file_hash = get_file_hash(
+        file_bytes
+    )
+
+    # Do not process the same PDF repeatedly
+    if (
+        st.session_state.processed_file_hash
+        == file_hash
+    ):
+
+        return
+
+    # Clear previous document data
+    clear_collection()
+
+    # Reset generated content
+    st.session_state.summary = ""
+
+    st.session_state.quiz = []
+
+    st.session_state.quiz_submitted = False
+
+    st.session_state.score = 0
+
+    st.session_state.answers = {}
+
+    # Extract PDF text
+    try:
+
+        doc = fitz.open(
+            stream=file_bytes,
+            filetype="pdf"
+        )
+
+        text_parts = []
+
+        for page in doc:
+
+            page_text = page.get_text()
+
+            if page_text.strip():
+
+                text_parts.append(
+                    page_text
+                )
+
+        doc.close()
+
+        text = "\n".join(
+            text_parts
+        )
+
+    except Exception as e:
+
+        st.error(
+            f"Could not read the PDF: {e}"
+        )
+
+        return
+
+    if not text.strip():
+
+        st.error(
+            "No readable text was found in this PDF."
+        )
+
+        return
+
+    # Chunk document
+    chunks = chunk_text(
+        text,
+        chunk_size=1000,
+        overlap=150
+    )
+
+    if not chunks:
+
+        st.error(
+            "Could not create document chunks."
+        )
+
+        return
+
+    # Generate embeddings
+    try:
+
+        embeddings = embedding_model.encode(
+            chunks
+        )
+
+        embeddings = embeddings.tolist()
+
+    except Exception as e:
+
+        st.error(
+            f"Embedding generation failed: {e}"
+        )
+
+        return
+
+    # Create unique IDs
+    ids = []
+
+    for i, chunk in enumerate(chunks):
+
+        chunk_hash = hashlib.md5(
+            chunk.encode(
+                "utf-8"
+            )
+        ).hexdigest()[:10]
+
+        ids.append(
+            f"{file_hash[:12]}_{i}_{chunk_hash}"
+        )
+
+    # Metadata
+    metadatas = []
+
+    for i in range(len(chunks)):
+
+        metadatas.append(
+            {
+                "source": uploaded_file.name,
+                "chunk": i
+            }
+        )
+
+    # Store in ChromaDB
+    try:
+
+        collection.upsert(
+            ids=ids,
+            documents=chunks,
+            embeddings=embeddings,
+            metadatas=metadatas
+        )
+
+    except Exception as e:
+
+        st.error(
+            f"ChromaDB storage failed: {e}"
+        )
+
+        return
+
+    # Save session information
+    st.session_state.processed_file_hash = (
+        file_hash
+    )
+
+    st.session_state.processed_file_name = (
+        uploaded_file.name
+    )
+
+    st.session_state.pdf_text = text
+
+    st.session_state.chunk_count = len(
+        chunks
+    )
+
+    st.session_state.embedding_count = len(
+        embeddings
+    )
+
+    # Clear previous chat because document changed
+    st.session_state.messages = []
+
+
+# ============================================================
+# MAIN UI
 # ============================================================
 
 st.title("🎓 Learnova")
@@ -933,18 +1139,11 @@ st.caption(
 
 
 # ============================================================
-# LEARNING LEVEL
+# DIFFICULTY LEVEL
 # ============================================================
 
-st.subheader(
-    "🎯 Choose Your Learning Level"
-)
-
-
 difficulty = st.selectbox(
-
-    "How would you like Learnova to explain concepts?",
-
+    "🎯 Choose your learning level",
     [
         "Beginner",
         "Intermediate",
@@ -958,17 +1157,13 @@ difficulty = st.selectbox(
 # ============================================================
 
 st.subheader(
-    "📚 Upload Study Material"
+    "📄 Upload your study material"
 )
 
-
 uploaded_file = st.file_uploader(
-
-    "Upload your study material as a PDF",
-
+    "Upload a PDF",
     type=["pdf"],
-
-    help="Upload lecture notes, textbooks, or study material."
+    help="Upload lecture notes, textbooks, study material, or question papers."
 )
 
 
@@ -978,259 +1173,87 @@ uploaded_file = st.file_uploader(
 
 if uploaded_file:
 
-    pdf_bytes = uploaded_file.getvalue()
-
-    current_file_hash = calculate_file_hash(
-        pdf_bytes
+    current_hash = get_file_hash(
+        uploaded_file.getvalue()
     )
-
-
-    # Process only if the PDF is new/changed
 
     if (
         st.session_state.processed_file_hash
-        != current_file_hash
+        != current_hash
     ):
 
         with st.spinner(
-            "📖 Processing your PDF..."
+            "Processing your PDF..."
         ):
 
-            try:
+            process_pdf(
+                uploaded_file
+            )
 
-                # ------------------------------------------------
-                # Clear old document data
-                # ------------------------------------------------
+        if (
+            st.session_state.processed_file_hash
+            == current_hash
+        ):
 
-                clear_collection()
+            st.success(
+                "✅ PDF processed successfully!"
+            )
 
+    else:
 
-                # Clear previous results
+        st.success(
+            f"📚 {uploaded_file.name} is ready."
+        )
 
-                st.session_state.summary = None
 
-                st.session_state.quiz = []
+# ============================================================
+# DOCUMENT STATUS
+# ============================================================
 
-                st.session_state.quiz_submitted = False
+if st.session_state.processed_file_hash:
 
-                st.session_state.score = 0
+    st.divider()
 
-                st.session_state.answers = []
-
-                st.session_state.quiz_version += 1
-
-
-                # ------------------------------------------------
-                # Extract PDF text
-                # ------------------------------------------------
-
-                doc = fitz.open(
-                    stream=pdf_bytes,
-                    filetype="pdf"
-                )
-
-
-                text_parts = []
-
-
-                for page in doc:
-
-                    page_text = page.get_text()
-
-                    if page_text.strip():
-
-                        text_parts.append(
-                            page_text
-                        )
-
-
-                doc.close()
-
-
-                text = "\n".join(
-                    text_parts
-                )
-
-
-                if not text.strip():
-
-                    st.error(
-                        "❌ No text could be extracted "
-                        "from this PDF."
-                    )
-
-                    st.stop()
-
-
-                # ------------------------------------------------
-                # Chunk text
-                # ------------------------------------------------
-
-                chunks = chunk_text(
-                    text,
-                    chunk_size=1000,
-                    overlap=150
-                )
-
-
-                if not chunks:
-
-                    st.error(
-                        "❌ Could not create text chunks."
-                    )
-
-                    st.stop()
-
-
-                # ------------------------------------------------
-                # Create embeddings
-                # ------------------------------------------------
-
-                embeddings = embedding_model.encode(
-                    chunks,
-                    show_progress_bar=False
-                )
-
-
-                # ------------------------------------------------
-                # Create unique IDs
-                # ------------------------------------------------
-
-                safe_file_name = re.sub(
-                    r"[^a-zA-Z0-9_.-]",
-                    "_",
-                    uploaded_file.name
-                )
-
-
-                ids = [
-
-                    f"{safe_file_name}_chunk_{i}"
-
-                    for i in range(
-                        len(chunks)
-                    )
-                ]
-
-
-                # ------------------------------------------------
-                # Metadata
-                # ------------------------------------------------
-
-                metadatas = [
-
-                    {
-                        "source": uploaded_file.name,
-                        "chunk": i
-                    }
-
-                    for i in range(
-                        len(chunks)
-                    )
-                ]
-
-
-                # ------------------------------------------------
-                # Store in ChromaDB
-                # ------------------------------------------------
-
-                collection.upsert(
-
-                    ids=ids,
-
-                    documents=chunks,
-
-                    embeddings=embeddings.tolist(),
-
-                    metadatas=metadatas
-                )
-
-
-                # ------------------------------------------------
-                # Save session information
-                # ------------------------------------------------
-
-                st.session_state.processed_file_hash = (
-                    current_file_hash
-                )
-
-                st.session_state.processed_file_name = (
-                    uploaded_file.name
-                )
-
-                st.session_state.pdf_text = text
-
-                st.session_state.chunk_count = len(
-                    chunks
-                )
-
-                st.session_state.embedding_count = len(
-                    embeddings
-                )
-
-
-            except Exception as e:
-
-                st.error(
-                    f"❌ Error while processing PDF: {e}"
-                )
-
-                st.stop()
-
-
-    # ========================================================
-    # PDF STATUS
-    # ========================================================
-
-    st.success(
-        f"✅ {uploaded_file.name} processed successfully!"
+    st.subheader(
+        "📊 Document Status"
     )
 
-
     col1, col2, col3 = st.columns(3)
-
 
     with col1:
 
         st.metric(
-            "📄 Pages",
-            "Processed"
+            "Chunks",
+            st.session_state.chunk_count
         )
-
 
     with col2:
 
         st.metric(
-            "📚 Chunks",
-            st.session_state.chunk_count
+            "Embeddings",
+            st.session_state.embedding_count
         )
-
 
     with col3:
 
         st.metric(
-            "🧠 Embeddings",
-            st.session_state.embedding_count
+            "Difficulty",
+            difficulty
         )
 
 
-    # ========================================================
-    # EXTRACTED TEXT
-    # ========================================================
+# ============================================================
+# EXTRACTED TEXT
+# ============================================================
+
+if st.session_state.pdf_text:
 
     with st.expander(
-        "📄 View Extracted Text"
+        "🔍 View extracted text"
     ):
 
-        st.text_area(
-
-            "PDF Content",
-
-            st.session_state.pdf_text,
-
-            height=300,
-
-            label_visibility="collapsed"
+        st.text(
+            st.session_state.pdf_text[:10000]
         )
 
 
@@ -1238,86 +1261,86 @@ if uploaded_file:
 # SUMMARY
 # ============================================================
 
-st.subheader(
-    "📖 AI Study Summary"
-)
+if st.session_state.processed_file_hash:
 
+    st.divider()
 
-if uploaded_file:
+    st.subheader(
+        "📝 AI Study Summary"
+    )
 
     if st.button(
-        "✨ Summarize My Notes",
-        use_container_width=True
+        "✨ Generate Summary"
     ):
 
         with st.spinner(
-            "🧠 Creating your summary..."
+            "Learnova is creating your summary..."
         ):
 
             summary = generate_summary()
 
+        if summary:
+
             st.session_state.summary = summary
 
+        else:
 
-else:
+            st.error(
+                "⚠️ Gemini is temporarily unavailable. "
+                "Please try again in a moment."
+            )
 
-    st.info(
-        "📚 Upload a PDF to generate an AI summary."
-    )
+    if st.session_state.summary:
 
-
-if st.session_state.summary:
-
-    st.markdown(
-        "### 📝 Your Study Summary"
-    )
-
-    st.markdown(
-        st.session_state.summary
-    )
+        st.markdown(
+            st.session_state.summary
+        )
 
 
 # ============================================================
-# QUIZ
+# QUIZ GENERATION
 # ============================================================
 
-st.subheader(
-    "📝 AI Quiz"
-)
+if st.session_state.processed_file_hash:
 
+    st.divider()
 
-if uploaded_file:
+    st.subheader(
+        "❓ AI Quiz"
+    )
 
     if st.button(
-        "🎯 Generate 5 MCQs",
-        use_container_width=True
+        "🎯 Generate 5 MCQs"
     ):
 
         with st.spinner(
-            "🧠 Creating your quiz..."
+            "Creating your quiz..."
         ):
 
-            quiz = generate_quiz()
+            quiz = generate_quiz(
+                difficulty
+            )
 
+        if quiz:
 
-            if quiz:
+            st.session_state.quiz = quiz
 
-                st.session_state.quiz = quiz
+            st.session_state.quiz_submitted = (
+                False
+            )
 
-                st.session_state.quiz_submitted = False
+            st.session_state.score = 0
 
-                st.session_state.score = 0
+            st.session_state.answers = {}
 
-                st.session_state.answers = []
+            st.session_state.quiz_version += 1
 
-                st.session_state.quiz_version += 1
+        else:
 
-
-else:
-
-    st.info(
-        "📚 Upload a PDF to generate a quiz."
-    )
+            st.error(
+                "⚠️ Could not generate the quiz. "
+                "Please try again."
+            )
 
 
 # ============================================================
@@ -1326,189 +1349,137 @@ else:
 
 if st.session_state.quiz:
 
-    st.write(
-        "### 🎓 Test Your Knowledge"
+    st.markdown(
+        f"### 🎯 {difficulty} Quiz"
     )
 
-
-    answers = []
-
-
-    quiz = st.session_state.quiz
-
-
     for i, question in enumerate(
-        quiz
+        st.session_state.quiz
     ):
 
         st.markdown(
-            f"**{i + 1}. {question['question']}**"
+            f"**Q{i + 1}. {question['question']}**"
         )
 
-
-        selected = st.radio(
-
+        answer = st.radio(
             "Choose an answer:",
-
             question["options"],
-
-            key=(
-                f"quiz_{st.session_state.quiz_version}"
-                f"_question_{i}"
-            ),
-
+            key=f"quiz_{st.session_state.quiz_version}_{i}",
             index=None
         )
 
+        st.session_state.answers[i] = answer
 
-        answers.append(
-            selected
-        )
-
-
-        if i < len(quiz) - 1:
-
-            st.divider()
-
+        st.write("")
 
     if st.button(
-        "✅ Submit Quiz",
-        use_container_width=True
+        "📊 Submit Quiz"
     ):
 
-        # Make sure every question has an answer
+        score = 0
 
-        if any(
-            answer is None
-            for answer in answers
+        for i, question in enumerate(
+            st.session_state.quiz
         ):
 
-            st.warning(
-                "⚠️ Please answer all 5 questions "
-                "before submitting."
+            selected = (
+                st.session_state.answers
+                .get(i)
             )
 
-        else:
-
-            score = 0
-
-
-            for i, question in enumerate(
-                quiz
+            if (
+                selected
+                == question["answer"]
             ):
 
-                if (
-                    answers[i]
-                    == question["answer"]
-                ):
+                score += 1
 
-                    score += 1
+        st.session_state.score = score
 
+        st.session_state.quiz_submitted = (
+            True
+        )
 
-            st.session_state.score = score
+    # ========================================================
+    # QUIZ RESULTS
+    # ========================================================
 
-            st.session_state.answers = answers
+    if st.session_state.quiz_submitted:
 
-            st.session_state.quiz_submitted = True
+        score = st.session_state.score
 
+        total = len(
+            st.session_state.quiz
+        )
 
-# ============================================================
-# QUIZ RESULTS
-# ============================================================
-
-if st.session_state.quiz_submitted:
-
-    score = st.session_state.score
-
-    total = len(
-        st.session_state.quiz
-    )
-
-
-    percentage = int(
-        (score / total) * 100
-    )
-
-
-    if percentage == 100:
+        percentage = (
+            score / total
+        ) * 100
 
         st.success(
-            f"🏆 Excellent! You scored {score}/{total} ({percentage}%)"
+            f"🎉 Your Score: {score}/{total} "
+            f"({percentage:.0f}%)"
         )
 
-    elif percentage >= 60:
-
-        st.success(
-            f"🎉 Good job! You scored {score}/{total} ({percentage}%)"
+        st.markdown(
+            "### 📖 Answer Review"
         )
 
-    else:
+        for i, question in enumerate(
+            st.session_state.quiz
+        ):
 
-        st.warning(
-            f"📚 Keep practicing! You scored {score}/{total} ({percentage}%)"
-        )
-
-
-    st.subheader(
-        "📖 Answer Explanations"
-    )
-
-
-    for i, question in enumerate(
-        st.session_state.quiz
-    ):
-
-        user_answer = (
-            st.session_state.answers[i]
-        )
-
-        correct_answer = (
-            question["answer"]
-        )
-
-
-        if user_answer == correct_answer:
-
-            st.success(
-                f"Question {i + 1}: Correct ✅"
+            selected = (
+                st.session_state.answers
+                .get(i)
             )
 
-        else:
-
-            st.error(
-                f"Question {i + 1}: Incorrect ❌"
+            correct = (
+                selected
+                == question["answer"]
             )
 
-            st.write(
-                f"Your answer: **{user_answer}**"
-            )
+            if correct:
 
-            st.write(
-                f"Correct answer: **{correct_answer}**"
-            )
+                st.success(
+                    f"Q{i + 1}: Correct ✅"
+                )
 
+            else:
 
-        st.info(
-            question.get(
-                "explanation",
-                "No explanation provided."
+                st.error(
+                    f"Q{i + 1}: Incorrect ❌"
+                )
+
+                st.write(
+                    f"Your answer: "
+                    f"{selected or 'Not answered'}"
+                )
+
+                st.write(
+                    f"Correct answer: "
+                    f"{question['answer']}"
+                )
+
+            st.caption(
+                question["explanation"]
             )
-        )
 
 
 # ============================================================
-# RAG CHAT
+# AI STUDY CHAT
 # ============================================================
+
+st.divider()
 
 st.subheader(
     "💬 Ask Learnova"
 )
 
-
-if not uploaded_file:
+if not st.session_state.processed_file_hash:
 
     st.info(
-        "📚 Upload a PDF first, then ask questions "
+        "📄 Upload a PDF first, then ask questions "
         "about your study material."
     )
 
@@ -1527,124 +1498,109 @@ for message in st.session_state.messages:
             message["content"]
         )
 
+        if (
+            message["role"]
+            == "assistant"
+            and message.get("sources")
+        ):
+
+            with st.expander(
+                "🔎 View retrieved sources"
+            ):
+
+                for source in message["sources"]:
+
+                    st.markdown(
+                        f"""
+                        **Chunk {source["chunk"] + 1}**
+
+                        {source["text"]}
+                        """
+                    )
+
 
 # ============================================================
 # CHAT INPUT
 # ============================================================
 
-prompt = st.chat_input(
-    "Ask something about your study material..."
-)
+if st.session_state.processed_file_hash:
 
-
-if prompt:
-
-    # --------------------------------------------------------
-    # User message
-    # --------------------------------------------------------
-
-    with st.chat_message(
-        "user"
-    ):
-
-        st.markdown(
-            prompt
-        )
-
-
-    st.session_state.messages.append(
-        {
-            "role": "user",
-            "content": prompt
-        }
+    prompt = st.chat_input(
+        "Ask a question about your PDF..."
     )
 
+    if prompt:
 
-    # --------------------------------------------------------
-    # Assistant response
-    # --------------------------------------------------------
-
-    with st.chat_message(
-        "assistant"
-    ):
-
-        if collection.count() == 0:
-
-            answer = (
-                "📚 Please upload a PDF first "
-                "so I can answer using your study material."
-            )
+        # Display user message
+        with st.chat_message(
+            "user"
+        ):
 
             st.markdown(
-                answer
+                prompt
             )
 
-        else:
+        st.session_state.messages.append(
+            {
+                "role": "user",
+                "content": prompt
+            }
+        )
+
+        # Generate answer
+        with st.chat_message(
+            "assistant"
+        ):
 
             with st.spinner(
-                "🧠 Learnova is thinking..."
+                "Learnova is thinking..."
             ):
 
-                answer, sources = (
+                answer, results = (
                     generate_rag_answer(
                         prompt,
                         difficulty
                     )
                 )
 
-
             st.markdown(
                 answer
             )
 
+            source_data = []
 
-            # ------------------------------------------------
-            # Show retrieved sources
-            # ------------------------------------------------
+            for document, metadata in results:
 
-            if sources:
+                source_data.append(
+                    {
+                        "text": document,
+                        "chunk": metadata.get(
+                            "chunk",
+                            0
+                        )
+                    }
+                )
+
+            if source_data:
 
                 with st.expander(
-                    "🔎 View retrieved study material"
+                    "🔎 View retrieved sources"
                 ):
 
-                    for i, (
-                        document,
-                        metadata
-                    ) in enumerate(
-                        sources
-                    ):
-
-                        chunk_number = (
-                            metadata.get(
-                                "chunk",
-                                i
-                            ) + 1
-                        )
-
+                    for source in source_data:
 
                         st.markdown(
-                            f"**Source chunk {chunk_number}**"
+                            f"""
+                            **Chunk {source["chunk"] + 1}**
+
+                            {source["text"]}
+                            """
                         )
 
-
-                        st.write(
-                            document
-                        )
-
-
-                        if i < len(sources) - 1:
-
-                            st.divider()
-
-
-    # --------------------------------------------------------
-    # Save assistant response
-    # --------------------------------------------------------
-
-    st.session_state.messages.append(
-        {
-            "role": "assistant",
-            "content": answer
-        }
-    )
+        st.session_state.messages.append(
+            {
+                "role": "assistant",
+                "content": answer,
+                "sources": source_data
+            }
+        )
