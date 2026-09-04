@@ -260,17 +260,20 @@ QUESTION:
     return generate_with_fallback(prompt)
 
 def generate_summary():
+
     documents = collection.get()["documents"]
 
     if not documents:
         return "No study material found."
 
-    # Summarize the document in smaller batches
     batch_size = 5
     partial_summaries = []
 
+    # Summarize each batch
     for i in range(0, len(documents), batch_size):
+
         batch = documents[i:i + batch_size]
+
         context = "\n\n".join(batch)
 
         prompt = f"""
@@ -289,14 +292,14 @@ STUDY MATERIAL:
 {context}
 """
 
-        try:
-            return generate_with_fallback(prompt)
+        summary = generate_with_fallback(prompt)
 
-        except Exception as e:
-            status = getattr(e, "status_code", "unknown")
-            return f"⚠️ Summary generation failed\n\nStatus: {status}\nError: {str(e)}"
+        if summary.startswith("⚠️ Gemini is temporarily unavailable"):
+            return summary
 
-    # Combine the smaller summaries
+        partial_summaries.append(summary)
+
+    # Combine all partial summaries
     combined = "\n\n".join(partial_summaries)
 
     final_prompt = f"""
@@ -316,18 +319,15 @@ PARTIAL SUMMARIES:
 {combined}
 """
 
-    try:
-        return generate_with_fallback(prompt)
+    final_summary = generate_with_fallback(final_prompt)
 
-    except Exception as e:
-        return f"⚠️ Final summary generation failed: {type(e).__name__}"
+    return final_summary
 # ============================================================
 # GENERATE QUIZ
 # ============================================================
 
 def generate_quiz():
 
-    # Get all stored documents
     data = collection.get()
 
     documents = data.get("documents", [])
@@ -335,7 +335,7 @@ def generate_quiz():
     if not documents:
         return []
 
-    # Combine study material
+    # Use first 10 chunks
     context = "\n\n".join(documents[:10])
 
     prompt = f"""
@@ -375,29 +375,25 @@ STUDY MATERIAL:
 {context}
 """
 
-    try:
+    quiz_text = generate_with_fallback(prompt)
 
-        return generate_with_fallback(prompt)
-
-    except Exception as e:
-
-        return "⚠️ Sorry, Learnova could not generate a response right now."
+    # Check if Gemini failed
+    if quiz_text.startswith("⚠️ Gemini is temporarily unavailable"):
+        st.error(quiz_text)
+        return []
 
     # Remove markdown code blocks if Gemini adds them
     if quiz_text.startswith("```"):
         quiz_text = quiz_text.replace(
-            "```json",
-            ""
+            "```json", ""
         ).replace(
-            "```",
-            ""
+            "```", ""
         ).strip()
 
     try:
 
         quiz = json.loads(quiz_text)
 
-        # Make sure we have 5 questions
         if not isinstance(quiz, list):
             return []
 
@@ -410,10 +406,6 @@ STUDY MATERIAL:
         )
 
         return []
-
-
-
-
 # ============================================================
 # TITLE
 # ============================================================
@@ -546,8 +538,6 @@ if uploaded_file:
         st.success(
             "📦 Chunks stored in ChromaDB! ✅"
         )
-if "processed_file" not in st.session_state:
-    st.session_state.processed_file = None
 # ============================================================
 # AI SUMMARY
 # ============================================================
