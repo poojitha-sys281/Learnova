@@ -246,7 +246,8 @@ STUDY MATERIAL:
             partial_summaries.append(response.text)
 
         except Exception as e:
-            return f"⚠️ Summary generation failed: {type(e).__name__}"
+            status = getattr(e, "status_code", "unknown")
+            return f"⚠️ Summary generation failed\n\nStatus: {status}\nError: {str(e)}"
 
     # Combine the smaller summaries
     combined = "\n\n".join(partial_summaries)
