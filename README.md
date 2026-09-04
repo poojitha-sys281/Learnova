@@ -22,6 +22,10 @@ It combines **Generative AI, Retrieval-Augmented Generation (RAG), embeddings, a
 
 ---
 
+## Architecture
+
+![Learnova Architecture](assets/learnova-architecture.png)
+
 ## 🧠 How Learnova Works
 
 Learnova follows a Retrieval-Augmented Generation (RAG) pipeline:
