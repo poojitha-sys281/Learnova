@@ -1,56 +1,91 @@
-# 🎓 Learnova – AI-Powered Personalized Learning Assistant
+# 🎓 Learnova
 
-Learnova is a Generative AI-powered learning assistant that helps students
-understand and revise their study material using their own PDF notes.
+### AI-Powered Personalized Learning Assistant
 
-## 🚀 Features
+Learnova is a Generative AI-powered learning assistant that helps students understand their study material through **PDF-based question answering, semantic search, RAG-powered responses, AI summaries, personalized explanations, and automatic MCQ generation**.
 
-- 📚 Upload PDF study material
-- 💬 Ask questions about uploaded notes
-- 🔍 Semantic similarity search
-- 🧠 Retrieval-Augmented Generation (RAG)
-- 🎯 Beginner, Intermediate and Advanced explanation modes
-- 📝 Automatic MCQ generation
-- ✅ Interactive quiz and scoring
-- 📖 AI-generated study summaries
-- 💡 Explanations for quiz answers
-- 💬 Chat history
+---
 
-## 🛠️ Tech Stack
+## ✨ Features
 
-- Python
-- Streamlit
-- Gemini API
-- Retrieval-Augmented Generation (RAG)
-- Sentence Transformers
-- Embeddings
-- ChromaDB
-- PyMuPDF
+### 📚 PDF-Based Learning
+Upload your study material as a PDF and interact with its contents using natural language.
 
-## 🏗️ Architecture
+### 🔎 Semantic Search
+Learnova uses embeddings to understand the meaning of a user's question and retrieve the most relevant sections from the uploaded document.
 
-PDF Study Material
-        ↓
-Text Extraction
-        ↓
-Text Chunking
-        ↓
-Embeddings
-        ↓
-ChromaDB
-        ↓
-Similarity Search
-        ↓
-Relevant Context
-        ↓
-Gemini
-        ↓
-Personalized Answer
+### 🧠 RAG-Powered Answers
+Learnova combines retrieved document context with Google's Gemini model to generate answers grounded in the uploaded study material.
 
-## ⚙️ How to Run
+### 📝 AI Summaries
+Generate concise summaries of the uploaded study material using Generative AI.
 
-### 1. Clone the repository
+### 🎯 Personalized Explanations
+Choose your learning level:
 
-```bash
-git clone YOUR_GITHUB_REPOSITORY_URL
-cd Learnova
+- Beginner
+- Intermediate
+- Advanced
+
+Learnova adjusts the explanation style according to the selected level.
+
+### ❓ Automatic MCQ Generation
+Generate multiple-choice questions automatically from the uploaded study material.
+
+### 📊 Quiz Scoring
+Attempt generated quizzes and receive your score instantly.
+
+### 💬 AI Study Chat
+Ask questions naturally and interact with Learnova as a personal study assistant.
+
+---
+
+# 🏗️ System Architecture
+
+```text
+                         ┌─────────────────────┐
+                         │    Learnova UI      │
+                         │     Streamlit       │
+                         └──────────┬──────────┘
+                                    │
+                         ┌──────────▼──────────┐
+                         │     PDF Upload      │
+                         └──────────┬──────────┘
+                                    │
+                         ┌──────────▼──────────┐
+                         │    Text Extraction  │
+                         │      PyMuPDF        │
+                         └──────────┬──────────┘
+                                    │
+                         ┌──────────▼──────────┐
+                         │      Chunking       │
+                         └──────────┬──────────┘
+                                    │
+                         ┌──────────▼──────────┐
+                         │     Embeddings      │
+                         │ SentenceTransformers│
+                         └──────────┬──────────┘
+                                    │
+                         ┌──────────▼──────────┐
+                         │      ChromaDB       │
+                         │    Vector Store     │
+                         └──────────┬──────────┘
+                                    │
+                              User Question
+                                    │
+                         ┌──────────▼──────────┐
+                         │   Semantic Search   │
+                         └──────────┬──────────┘
+                                    │
+                         ┌──────────▼──────────┐
+                         │  Relevant Context   │
+                         └──────────┬──────────┘
+                                    │
+                         ┌──────────▼──────────┐
+                         │       Gemini        │
+                         │      GenAI LLM      │
+                         └──────────┬──────────┘
+                                    │
+                         ┌──────────▼──────────┐
+                         │   RAG-Based Answer  │
+                         └─────────────────────┘
